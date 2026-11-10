@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hospitality Operations Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --ink: #1c2733; --muted: #5f6f80; --line: #dde3ea;
+    --accent: #1f5f8b; --warn: #c0392b; --good: #2e7d5b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11161c; --card: #1a2129; --ink: #e6ebf0; --muted: #9aa8b6; --line: #2c3640;
+            --accent: #5fa8d9; --warn: #e5786b; --good: #5cc292; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 40px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; align-items: end; }
+  .filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 4px; }
+  select, button { font: inherit; color: var(--ink); background: var(--card); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 7px 10px; min-width: 170px; }
+  button { min-width: 0; cursor: pointer; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .kpi .label { font-size: 12px; color: var(--muted); }
+  .kpi .value { font-size: 24px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .kpi.warn .value { color: var(--warn); }
+  .insight { background: var(--card); border-left: 4px solid var(--warn); border-radius: 6px;
+             padding: 12px 16px; margin-bottom: 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+  .chart { position: relative; height: 280px; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 22px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } select { min-width: 140px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hospitality Operations Dashboard</h1>
+  <p class="sub">City and resort hotel bookings, July 2015 to August 2017. Filter by property type, season and booking channel.</p>
+
+  <div class="filters">
+    <label>Property type<select id="f-hotel"></select></label>
+    <label>Season<select id="f-season"></select></label>
+    <label>Booking channel<select id="f-channel"></select></label>
+    <button id="reset">Reset filters</button>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="label">Bookings</div><div class="value" id="k-bookings"></div></div>
+    <div class="kpi warn"><div class="label">Cancellation rate</div><div class="value" id="k-cancel"></div></div>
+    <div class="kpi"><div class="label">Avg lead time</div><div class="value" id="k-lead"></div></div>
+    <div class="kpi"><div class="label">ADR (stayed)</div><div class="value" id="k-adr"></div></div>
+    <div class="kpi"><div class="label">Realized revenue</div><div class="value" id="k-rev"></div></div>
+    <div class="kpi warn"><div class="label">Revenue lost to cancellations</div><div class="value" id="k-lost"></div></div>
+  </div>
+
+  <div class="insight" id="insight"></div>
+
+  <div class="grid">
+    <div class="card wide">
+      <h2>Bookings and cancellation rate by month</h2>
+      <p>Bars show bookings by arrival month; the line shows the share canceled.</p>
+      <div class="chart"><canvas id="c-trend"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Cancellation rate by lead time</h2>
+      <p>The further ahead a booking is made, the more likely it is canceled.</p>
+      <div class="chart"><canvas id="c-lead"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Revenue lost by booking channel</h2>
+      <p>Room revenue from canceled bookings (ADR x nights).</p>
+      <div class="chart"><canvas id="c-channel"></canvas></div>
+    </div>
+    <div class="card wide">
+      <h2>Average daily rate by arrival month</h2>
+      <p>Seasonality in room pricing, stayed bookings only.</p>
+      <div class="chart"><canvas id="c-adr"></canvas></div>
+    </div>
+  </div>
+
+  <footer>
+    Data: Antonio, Almeida and Nunes (2019), "Hotel booking demand datasets", <i>Data in Brief</i> 22, 41-49.
+    Revenue is estimated as ADR x nights. Occupancy and RevPAR are not shown because the data has no room inventory.
+  </footer>
+</div>
+
+<script>
+const DATA = /*__DATA__*/[];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const LEAD = ["0-7 days","8-30 days","31-90 days","91-180 days","181-365 days","365+ days"];
+const SEASONS = ["Winter","Spring","Summer","Fall"];
+
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const uniq = k => [...new Set(DATA.map(d => d[k]))].sort();
+const money = v => v >= 1e6 ? "$" + (v / 1e6).toFixed(1) + "M" : "$" + Math.round(v / 1e3).toLocaleString() + "K";
+const pct = v => (v * 100).toFixed(1) + "%";
+
+function fillSelect(id, values) {
+  const s = document.getElementById(id);
+  s.innerHTML = '<option value="">All</option>' + values.map(v => `<option>${v}</option>`).join("");
+  s.addEventListener("change", render);
+}
+fillSelect("f-hotel", uniq("h"));
+fillSelect("f-season", SEASONS);
+fillSelect("f-channel", uniq("c"));
+document.getElementById("reset").onclick = () => {
+  ["f-hotel", "f-season", "f-channel"].forEach(id => document.getElementById(id).value = "");
+  render();
+};
+
+function sumBy(rows, keyFn) {
+  const m = new Map();
+  for (const r of rows) {
+    const k = keyFn(r);
+    const a = m.get(k) || { b: 0, x: 0, lt: 0, n: 0, r: 0, lo: 0 };
+    a.b += r.b; a.x += r.x; a.lt += r.lt; a.n += r.n; a.r += r.r; a.lo += r.lo;
+    m.set(k, a);
+  }
+  return m;
+}
+
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+const charts = {};
+function draw(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), config);
+}
+
+function render() {
+  const fh = document.getElementById("f-hotel").value;
+  const fs = document.getElementById("f-season").value;
+  const fc = document.getElementById("f-channel").value;
+  const rows = DATA.filter(d => (!fh || d.h === fh) && (!fs || d.s === fs) && (!fc || d.c === fc));
+  const t = sumBy(rows, () => "all").get("all") || { b: 0, x: 0, lt: 0, n: 0, r: 0, lo: 0 };
+
+  const ink = css("--ink"), muted = css("--muted"), line = css("--line");
+  const accent = css("--accent"), warn = css("--warn");
+  Chart.defaults.color = muted;
+  Chart.defaults.borderColor = line;
+
+  document.getElementById("k-bookings").textContent = t.b.toLocaleString();
+  document.getElementById("k-cancel").textContent = t.b ? pct(t.x / t.b) : "-";
+  document.getElementById("k-lead").textContent = t.b ? Math.round(t.lt / t.b) + " days" : "-";
+  document.getElementById("k-adr").textContent = t.n ? "$" + (t.r / t.n).toFixed(2) : "-";
+  document.getElementById("k-rev").textContent = money(t.r);
+  document.getElementById("k-lost").textContent = money(t.lo);
+
+  // Monthly trend
+  const byMonth = sumBy(rows, r => r.ym);
+  const months = [...byMonth.keys()].sort();
+  draw("c-trend", {
+    data: {
+      labels: months.map(m => MONTHS[+m.slice(5) - 1] + " " + m.slice(2, 4)),
+      datasets: [
+        { type: "bar", label: "Bookings", data: months.map(m => byMonth.get(m).b),
+          backgroundColor: accent + "99", yAxisID: "y" },
+        { type: "line", label: "Cancellation rate", data: months.map(m => byMonth.get(m).x / byMonth.get(m).b),
+          borderColor: warn, backgroundColor: warn, pointRadius: 2, tension: 0.25, yAxisID: "y1" }
+      ]
+    },
+    options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+      plugins: { tooltip: { callbacks: { label: c => c.dataset.yAxisID === "y1"
+        ? " Cancellation rate: " + pct(c.parsed.y) : " Bookings: " + c.parsed.y.toLocaleString() } } },
+      scales: { x: { grid: { display: false } },
+        y: { beginAtZero: true, title: { display: true, text: "Bookings" } },
+        y1: { position: "right", min: 0, max: 0.7, grid: { display: false },
+              ticks: { callback: v => Math.round(v * 100) + "%" } } } }
+  });
+
+  // Lead time
+  const byLead = sumBy(rows, r => r.l);
+  draw("c-lead", {
+    type: "bar",
+    data: { labels: LEAD, datasets: [{ label: "Cancellation rate",
+      data: LEAD.map(l => byLead.has(l) ? byLead.get(l).x / byLead.get(l).b : 0), backgroundColor: warn }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: c => " " + pct(c.parsed.y) } } },
+      scales: { x: { grid: { display: false } },
+                y: { beginAtZero: true, ticks: { callback: v => Math.round(v * 100) + "%" } } } }
+  });
+
+  // Revenue lost by channel
+  const byCh = [...sumBy(rows, r => r.c).entries()].sort((a, b) => b[1].lo - a[1].lo);
+  draw("c-channel", {
+    type: "bar",
+    data: { labels: byCh.map(e => e[0]), datasets: [{ label: "Revenue lost",
+      data: byCh.map(e => e[1].lo), backgroundColor: accent }] },
+    options: { indexAxis: "y", maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: c => " " + money(c.parsed.x) + " lost, " +
+        pct(byCh[c.dataIndex][1].x / byCh[c.dataIndex][1].b) + " canceled" } } },
+      scales: { y: { grid: { display: false } }, x: { ticks: { callback: v => money(v) } } } }
+  });
+
+  // ADR by calendar month
+  const byCal = sumBy(rows, r => +r.ym.slice(5));
+  draw("c-adr", {
+    type: "line",
+    data: { labels: MONTHS, datasets: [{ label: "ADR",
+      data: MONTHS.map((_, i) => byCal.has(i + 1) && byCal.get(i + 1).n ? byCal.get(i + 1).r / byCal.get(i + 1).n : null),
+      borderColor: accent, backgroundColor: accent, tension: 0.3, pointRadius: 3 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false },
+      tooltip: { callbacks: { label: c => " $" + c.parsed.y.toFixed(2) } } },
+      scales: { x: { grid: { display: false } }, y: { ticks: { callback: v => "$" + v } } } }
+  });
+
+  // Insight line
+  const el = document.getElementById("insight");
+  if (!t.b) { el.textContent = "No bookings match these filters."; return; }
+  const top = byCh[0];
+  const lostShare = t.lo / (t.lo + t.r);
+  el.innerHTML = `<b>${pct(lostShare)}</b> of booked room revenue was lost to cancellations. ` +
+    `<b>${top[0]}</b> bookings account for the largest share, ${money(top[1].lo)} ` +
+    `(${pct(top[1].lo / t.lo)} of the loss), with a ${pct(top[1].x / top[1].b)} cancellation rate.`;
+}
+
+render();
+</script>
+</body>
+</html>

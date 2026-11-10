@@ -1,0 +1,13 @@
+hotel,channel,bookings,cancellation_rate,avg_lead_time,realized_revenue,lost_revenue
+City Hotel,Corporate,2961,0.216,25.639,365655.4,118393.22
+City Hotel,Direct,6016,0.175,51.85,1656253.9,464781.44
+City Hotel,Groups,13955,0.689,195.414,980761.46,2141202.55
+City Hotel,Offline travel agent,16642,0.431,142.097,2553778.69,1915760.65
+City Hotel,Online travel agent,38577,0.375,83.138,8755281.19,6222700.93
+City Hotel,Other,747,0.143,9.218,73611.36,16820.99
+Resort Hotel,Corporate,2270,0.154,17.82,212236.79,77989.85
+Resort Hotel,Direct,6433,0.136,48.68,2441588.5,528628.38
+Resort Hotel,Groups,5803,0.426,167.499,888368.06,659341.43
+Resort Hotel,Offline travel agent,7406,0.153,121.137,3105513.25,571197.5
+Resort Hotel,Online travel agent,17552,0.356,83.752,4951857.9,4004945.18
+Resort Hotel,Other,201,0.164,20.015,2069.53,75.0
